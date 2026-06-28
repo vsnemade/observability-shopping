@@ -1,0 +1,25 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: product-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true   # exposes /actuator/health/liveness and /readiness for k8s
+  metrics:
+    distribution:
+      # Per-endpoint latency histograms so Prometheus/Grafana can compute p95/p99
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

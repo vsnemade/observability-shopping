@@ -1,0 +1,32 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+
+# Downstream service URLs. Defaults target the k8s Service DNS names; override via env vars
+# (DOWNSTREAM_PRODUCT_SERVICE_URL / DOWNSTREAM_PAYMENT_SERVICE_URL) for local runs.
+downstream:
+  product-service:
+    url: ${DOWNSTREAM_PRODUCT_SERVICE_URL:http://product-service:8082}
+  payment-service:
+    url: ${DOWNSTREAM_PAYMENT_SERVICE_URL:http://payment-service:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

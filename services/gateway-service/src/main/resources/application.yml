@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+
+downstream:
+  order-service:
+    url: ${DOWNSTREAM_ORDER_SERVICE_URL:http://order-service:8081}
+  product-service:
+    url: ${DOWNSTREAM_PRODUCT_SERVICE_URL:http://product-service:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

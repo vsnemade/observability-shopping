@@ -1,0 +1,6 @@
+# Everything lives in one namespace to keep service DNS short (e.g. http://product-service:8082).
+# In production you'd typically split apps and the observability stack into separate namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared logging config for all services (lives on the classpath via the common module).
+
+  The OpenTelemetry Java agent automatically injects `trace_id`, `span_id` and `trace_flags`
+  into the SLF4J MDC, and CorrelationIdFilter adds `correlationId`. We render all of them on
+  every line so `kubectl logs` is already correlatable, and the agent's logback appender ships
+  the same records (with MDC as attributes) over OTLP to the Collector -> Loki.
+-->
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="app"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [${appName}] [trace=%X{trace_id:-} span=%X{span_id:-} corr=%X{correlationId:-}] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- Keep our application logs chatty enough to be interesting in Loki -->
+    <logger name="com.shop" level="DEBUG"/>
+</configuration>

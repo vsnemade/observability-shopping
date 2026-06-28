@@ -1,0 +1,9 @@
+**/target/
+**/*.iml
+.git/
+.idea/
+*.md
+k8s/
+scripts/
+kind/
+grafana/

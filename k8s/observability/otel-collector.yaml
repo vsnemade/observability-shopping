@@ -1,0 +1,109 @@
+# OpenTelemetry Collector: single OTLP entrypoint for all services.
+#   traces -> Tempo (and Jaeger, so you can compare the two UIs)
+#   logs   -> Loki (the "OTel Collector -> Loki" path you chose)
+# Metrics intentionally do NOT flow through here: services expose Micrometer/Prometheus metrics
+# that Prometheus scrapes directly, so you can practice the metrics pillar independently.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: shop
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch: {}
+      # Promote a couple of resource attributes so they become useful Loki labels.
+      attributes/loki:
+        actions:
+          - action: insert
+            key: loki.attribute.labels
+            value: service.name, level
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+      otlp/jaeger:
+        endpoint: jaeger:4317
+        tls:
+          insecure: true
+      otlphttp/loki:
+        endpoint: http://loki:3100/otlp
+        tls:
+          insecure: true
+      debug:
+        verbosity: basic
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp/tempo, otlp/jaeger]
+        logs:
+          receivers: [otlp]
+          processors: [attributes/loki, batch]
+          exporters: [otlphttp/loki]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: shop
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.111.0
+          args: ["--config=/etc/otel/collector.yaml"]
+          ports:
+            - containerPort: 4317  # OTLP gRPC
+            - containerPort: 4318  # OTLP HTTP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: shop
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
