@@ -8,7 +8,8 @@ $forwards = @(
     @{ name = "prometheus"; svc = "svc/prometheus";      ports = "9090:9090" },
     @{ name = "jaeger";     svc = "svc/jaeger";          ports = "16686:16686" },
     @{ name = "tempo";      svc = "svc/tempo";           ports = "3200:3200" },
-    @{ name = "loki";       svc = "svc/loki";            ports = "3100:3100" }
+    @{ name = "loki";       svc = "svc/loki";            ports = "3100:3100" },
+    @{ name = "aiops";      svc = "svc/aiops-service";   ports = "8090:8090" }
 )
 
 # Clean up any prior jobs from this script
@@ -28,5 +29,6 @@ Write-Host "  Grafana     http://localhost:3000   (anonymous admin; explore Temp
 Write-Host "  Prometheus  http://localhost:9090"
 Write-Host "  Jaeger      http://localhost:16686"
 Write-Host "  Gateway API http://localhost:8080/api/products"
+Write-Host "  AIOps       http://localhost:8090   (incidents + RCA reports)"
 Write-Host ""
 Write-Host "Stop everything with: Get-Job -Name pf-* | Stop-Job; Get-Job -Name pf-* | Remove-Job" -ForegroundColor DarkGray

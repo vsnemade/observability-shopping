@@ -19,5 +19,13 @@ foreach ($svc in $services) {
     }
 }
 
+# The Python AIOps service has its own Dockerfile (the root one is the Maven build).
+Write-Host "==> Building aiops-service:local" -ForegroundColor Cyan
+docker build -t "aiops-service:local" -f "$root/Dockerfile.aiops" $root
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Build failed for aiops-service (exit $LASTEXITCODE)" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "All images built." -ForegroundColor Green
-docker images | Select-String "gateway-service|order-service|product-service|payment-service"
+docker images | Select-String "gateway-service|order-service|product-service|payment-service|aiops-service"

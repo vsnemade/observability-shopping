@@ -226,3 +226,64 @@ backend (Datadog, Honeycomb, Dynatrace, Grafana Cloud) instead of self-hosting e
 **Remember the rule of thumb:** *metrics tell you something is wrong, traces tell you where, logs tell
 you why.* Practice the flow in that order: dashboard spike → drill into a trace → pivot to logs for the
 root cause.
+
+---
+
+## 9. AIOps — the layer on top of the three pillars
+
+The 5th service, **aiops-service** ([services/aiops-service](services/aiops-service)), is a Python/FastAPI
+backend that consumes the *same APIs you query by hand* in sections 3–5 and automates the correlation
+workflow of section 6, plus a **React dashboard** ([frontend/](services/aiops-service/frontend)) served
+by FastAPI itself. UI at `http://localhost:8090` after port-forward — incident list, findings feed,
+suggested actions with an "Execute" button, and the RCA report rendered from markdown.
+
+The frontend is built with Vite and compiled at Docker build time (`Dockerfile.aiops` is a two-stage
+build: `node:22-slim` builds `frontend/` → `dist/`, then only the compiled static files are copied into
+the Python runtime image — Node itself never ships). To iterate on the UI locally: `kubectl -n shop
+port-forward svc/aiops-service 8090:8090` in one terminal, `npm run dev` in `frontend/` in another — the
+Vite dev server proxies `/incidents`, `/findings`, `/health` to the real backend.
+
+**Pipeline (runs every 30s):**
+
+```
+Prometheus API ──┐  z-score anomaly detection      (metrics_anomaly.py)
+Loki API ────────┼─ log-template "new pattern"/burst detection (log_analyser.py)
+Tempo API ───────┘  TraceQL error/slow-trace search (trace_analyser.py)
+        │ findings
+        ▼
+Correlation engine (correlation.py): dedup + group per-service → INCIDENT
+        │
+        ├─▶ Grafana annotation  (vertical line on every dashboard)
+        ├─▶ Remediation rules   (suggest; optionally auto rollout-restart)
+        └─▶ RCA engine (rca.py): gathers metrics snapshot + error logs +
+            one full span tree → Claude API → markdown root-cause report
+```
+
+**The five classic AIOps capabilities and where each lives here:**
+
+| Capability | Technique used | File |
+|---|---|---|
+| Anomaly detection | z-score vs 30-min baseline (+ `up == 0` rule) | `detectors/metrics_anomaly.py` |
+| Log pattern analysis | Drain-style templating (mask numbers/UUIDs → count templates) | `detectors/log_analyser.py` |
+| Event correlation | dedup cooldown + per-service time-window grouping | `correlation.py` |
+| Root-cause analysis | LLM (Claude, adaptive thinking) over cross-pillar evidence bundle | `rca.py` |
+| Auto-remediation | rule table → k8s API rolling restart (opt-in, RBAC-scoped) | `remediation.py` |
+
+**Enable Claude-powered RCA** (otherwise a heuristic report is produced):
+```powershell
+kubectl -n shop create secret generic aiops-secrets --from-literal=anthropic-api-key=sk-ant-...
+kubectl -n shop rollout restart deployment/aiops-service
+```
+
+**Demo an incident:**
+```powershell
+# Break payment: kill it, so checkouts 5xx and error traces appear
+kubectl -n shop scale deployment/payment-service --replicas=0
+./scripts/generate-traffic.ps1          # produce failing checkouts
+# watch http://localhost:8090 — incident opens, RCA fills in, Grafana gets an annotation
+kubectl -n shop scale deployment/payment-service --replicas=1   # heal
+```
+
+**Interview sound bite:** AIOps = ML/AI applied to the telemetry you already collect — anomaly
+detection instead of static thresholds, event correlation instead of alert storms, LLM-assisted RCA
+instead of manual pivoting, and guarded auto-remediation for known failure signatures.

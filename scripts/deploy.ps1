@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 $cluster = "obs-lab"
-$services = @("gateway-service", "order-service", "product-service", "payment-service")
+$services = @("gateway-service", "order-service", "product-service", "payment-service", "aiops-service")
 
 function Assert-LastExit($message) {
     if ($LASTEXITCODE -ne 0) {

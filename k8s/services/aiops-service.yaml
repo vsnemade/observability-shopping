@@ -1,0 +1,114 @@
+# AIOps service: watches Prometheus/Loki/Tempo, correlates anomalies into incidents,
+# annotates Grafana, and (optionally) asks Claude for root-cause analysis.
+#
+# LLM RCA needs an Anthropic API key. Create the secret once:
+#   kubectl -n shop create secret generic aiops-secrets --from-literal=anthropic-api-key=sk-ant-...
+# Without it the service still runs and produces heuristic RCA reports.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aiops
+  namespace: shop
+---
+# RBAC for the auto-remediation hook: the only thing it may do is a rolling
+# restart (patch) of the shop deployments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: aiops-remediator
+  namespace: shop
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-remediator
+  namespace: shop
+subjects:
+  - kind: ServiceAccount
+    name: aiops
+    namespace: shop
+roleRef:
+  kind: Role
+  name: aiops-remediator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-service
+  namespace: shop
+  labels:
+    app: aiops-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-service
+  template:
+    metadata:
+      labels:
+        app: aiops-service
+    spec:
+      serviceAccountName: aiops
+      containers:
+        - name: aiops-service
+          image: aiops-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+          env:
+            - name: PROMETHEUS_URL
+              value: http://prometheus:9090
+            - name: LOKI_URL
+              value: http://loki:3100
+            - name: TEMPO_URL
+              value: http://tempo:3200
+            - name: GRAFANA_URL
+              value: http://grafana:3000
+            - name: POLL_INTERVAL_SECONDS
+              value: "30"
+            - name: AUTO_REMEDIATE          # flip to "true" to let it restart wedged deployments
+              value: "false"
+            - name: ANTHROPIC_MODEL
+              value: claude-opus-4-8
+            - name: ANTHROPIC_API_KEY       # optional — heuristic RCA without it
+              valueFrom:
+                secretKeyRef:
+                  name: aiops-secrets
+                  key: anthropic-api-key
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aiops-service
+  namespace: shop
+spec:
+  selector:
+    app: aiops-service
+  ports:
+    - port: 8090
+      targetPort: 8090
